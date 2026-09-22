@@ -1,6 +1,4 @@
-# Welcome to Secure Code Game Season-1/Level-3!
-
-# You know how to play by now, good luck!
+# Model solution follows
 
 import os
 from flask import Flask, request
@@ -27,13 +25,11 @@ class TaxPayer:
         if not path:
             pass
 
-        # defends against path traversal attacks
-        if path.startswith('/') or path.startswith('..'):
-            return None
-
         # builds path
         base_dir = os.path.dirname(os.path.abspath(__file__))
         prof_picture_path = os.path.normpath(os.path.join(base_dir, path))
+        if not prof_picture_path.startswith(base_dir):
+            return None
 
         with open(prof_picture_path, 'rb') as pic:
             picture = bytearray(pic.read())
@@ -45,11 +41,18 @@ class TaxPayer:
     def get_tax_form_attachment(self, path=None):
         tax_data = None
 
+        # A tax form is required
         if not path:
             raise Exception("Error: Tax form is required for all users")
 
-        with open(path, 'rb') as form:
+        # Validate the path to prevent path traversal attacks
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        tax_form_path = os.path.normpath(os.path.join(base_dir, path))
+        if not tax_form_path.startswith(base_dir):
+            return None
+
+        with open(tax_form_path, 'rb') as form:
             tax_data = bytearray(form.read())
 
         # assume that tax data is returned on screen after this
-        return path
+        return tax_form_path
