@@ -3,7 +3,6 @@
 # This is the last level of our first season, good luck!
 
 import binascii
-import random
 import secrets
 import hashlib
 import os
@@ -11,18 +10,24 @@ import bcrypt
 
 class Random_generator:
 
-    # generates a random token
+    # FIX: uses `secrets.choice` instead of `random.choice`. The `random`
+    # module is a Mersenne Twister PRNG -- not cryptographically secure.
+    # Its internal state can be reconstructed from observed outputs, making
+    # tokens predictable. `secrets` is built on os.urandom() and is safe
+    # for security-sensitive values like tokens, session ids, reset codes.
     def generate_token(self, length=8, alphabet=(
     '0123456789'
     'abcdefghijklmnopqrstuvwxyz'
     'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     )):
-        return ''.join(random.choice(alphabet) for _ in range(length))
+        return ''.join(secrets.choice(alphabet) for _ in range(length))
 
-    # generates salt
+    # FIX: uses bcrypt's own gensalt() instead of hand-assembling a salt
+    # string from `random.randint` digits. Rolling your own salt format is
+    # both insecure (weak PRNG again) and error-prone (easy to violate
+    # bcrypt's expected structure/alphabet without noticing).
     def generate_salt(self, rounds=12):
-        salt = ''.join(str(random.randint(0, 9)) for _ in range(21)) + '.'
-        return f'$2b${rounds}${salt}'.encode()
+        return bcrypt.gensalt(rounds)
 
 class SHA256_hasher:
 
@@ -38,21 +43,30 @@ class SHA256_hasher:
         password_hash = password_hash.encode('ascii')
         return bcrypt.checkpw(password, password_hash)
 
-class MD5_hasher:
-
-    # same as above but using a different algorithm to hash which is MD5
-    def password_hash(self, password):
-        return hashlib.md5(password.encode()).hexdigest()
-
-    def password_verification(self, password, password_hash):
-        password = self.password_hash(password)
-        return secrets.compare_digest(password.encode(), password_hash.encode())
+# REMOVED: MD5_hasher.
+# MD5 is unsuitable for password storage: it is fast by design (cheap to
+# brute-force at scale), it is used here with no salt at all (identical
+# passwords -> identical hashes, vulnerable to rainbow tables), and it is a
+# cryptographically broken hash function. There is no safe configuration of
+# MD5 for this purpose, so rather than leave it present-but-discouraged, it
+# is removed to make it impossible to select accidentally. SHA256_hasher
+# (SHA-256 + bcrypt) is the only hasher available now.
 
 # a collection of sensitive secrets necessary for the software to operate
 PRIVATE_KEY = os.environ.get('PRIVATE_KEY')
 PUBLIC_KEY = os.environ.get('PUBLIC_KEY')
-SECRET_KEY = 'TjWnZr4u7x!A%D*G-KaPdSgVkXp2s5v8'
-PASSWORD_HASHER = 'MD5_hasher'
+# FIX: loaded from the environment, like PRIVATE_KEY/PUBLIC_KEY, instead of
+# being a hardcoded literal committed to source control (CWE-798: Use of
+# Hardcoded Credentials). Anyone with read access to the repo -- or anyone
+# who finds it in a leak, a fork, or a static-analysis dump -- previously
+# had the real key.
+SECRET_KEY = os.environ.get('SECRET_KEY')
+# FIX: points at the secure hasher. The old value 'MD5_hasher' silently
+# routed real password hashing to the broken algorithm above -- a plain
+# string constant that no static analyzer would flag as dangerous on its
+# own, since the risk only exists once something else does
+# getattr(this_module, PASSWORD_HASHER)() at runtime.
+PASSWORD_HASHER = 'SHA256_hasher'
 
 
 # Contribute new levels to the game in 3 simple steps!
